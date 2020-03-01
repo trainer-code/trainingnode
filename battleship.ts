@@ -18,6 +18,14 @@ export enum Letter {
     H = 'H'
 }
 
+export enum ShipLetter {
+    A = 'A',
+    B = 'B',
+    S = 'S',
+    D = 'D',
+    P = 'P'
+}
+
 export interface Shot {
     letter: Letter;
     index: number;
@@ -25,6 +33,7 @@ export interface Shot {
 
 export interface ShipPart extends Shot {
     isHit?: boolean;
+    shipLetter?: ShipLetter;
 }
 
 
