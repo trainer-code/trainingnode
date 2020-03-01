@@ -1,6 +1,10 @@
-import { Ship, ShipPart, Letter, ShipLetter } from "./battleship";
+import { Letter, ShipLetter } from "./enums";
+import { ShipPart, Shot } from "./interfaces";
 
-const computerBoard1 = `
+const LETTERS = 'ABCDEFGH';
+const BOARD_SIZE = 8;
+
+export const computerBoard = `
     1 2 3 4 5 6 7 8 
   A 0 0 0 B B 0 0 0
   B 0 0 0 B B 0 0 0
@@ -9,30 +13,6 @@ const computerBoard1 = `
   E 0 0 A A A A 0 0
   F S S S 0 0 A P P
   G 0 0 0 0 0 0 0 0
-  H 0 0 0 0 0 0 0 0
-`;
-
-const computerBoard2 = `
-    1 2 3 4 5 6 7 8 
-  A 0 P 0 0 0 0 0 0
-  B 0 P 0 0 0 0 0 0
-  C 0 0 0 0 D 0 0 0
-  D 0 0 0 D D S 0 0
-  E 0 0 A A A S 0 0
-  F 0 0 A 0 0 S 0 0
-  G 0 B B 0 0 0 0 0
-  H B B 0 0 0 0 0 0
-`;
-
-const computerBoard3 = `
-    1 2 3 4 5 6 7 8 
-  A D D D 0 0 0 0 P
-  B 0 0 0 0 0 0 0 P
-  C 0 0 0 A 0 0 0 0
-  D 0 0 0 A 0 S 0 0
-  E 0 B A A 0 S S 0
-  F 0 B 0 0 0 0 0 0
-  G 0 B B 0 0 0 0 0
   H 0 0 0 0 0 0 0 0
 `;
 
@@ -49,7 +29,7 @@ const emptyBoard = `
 `;
 
 
-interface GameBoardShips {
+export interface GameBoardShips {
   aircraftCarrier: Array<ShipPart>;
   battleship: Array<ShipPart>;
   submarine: Array<ShipPart>;
@@ -57,13 +37,30 @@ interface GameBoardShips {
   patrolBoat: Array<ShipPart>;
 }
 
+const shipLetterToKeyMap = {
+  A: 'aircraftCarrier',
+  B: 'battleship',
+  S: 'submarine',
+  D: 'destroyer',
+  P: 'patrolBoat'
+}
+
+export const isValidPosition = (positionStr: string) => {
+  return positionStr.length === 2 && LETTERS.indexOf(positionStr[0].toUpperCase()) > -1 && Number(positionStr[1]) <= BOARD_SIZE;
+};
+
 export class GameBoard {
-  ships: GameBoardShips;
-  boardwidth = 8;
-  boardHeight = 8;
+  ships: GameBoardShips = {
+    aircraftCarrier: [],
+    battleship: [],
+    submarine: [],
+    destroyer: [],
+    patrolBoat: []
+  };
+  gameDimension = 8; // 8x8
 
   parseShipPart(letterRow: number, i: number): ShipPart {
-    return { letter: 'ABCDEFGH'[letterRow] as Letter, index: (i - (26 + letterRow * 20)) / 2 + 1 };
+    return { letter: LETTERS[letterRow] as Letter, index: (i - (26 + letterRow * (this.gameDimension + 2) * 2)) / 2 + 1 };
   }
 
   parseBoard(boardStr: string, boardFunc: any): [string, GameBoardShips] {
@@ -126,19 +123,29 @@ export class GameBoard {
     this.ships = ships;
   }
 
-  serialiseBoard(): string {
-    const getAllShipParts = () => {
-      let parts: Array<ShipPart> = [];
-      for (const shipKey of Object.keys(this.ships)) {
-        const ship: Array<ShipPart> = this.ships[shipKey];
-        const letterShipPart: Array<ShipPart> = ship.map(el => ({ ...el, shipLetter: shipKey[0].toUpperCase() as ShipLetter }));
-        parts = parts.concat(letterShipPart);
-      }
-
-      return parts;
+  tryHitAShip(shot: Shot) {
+    const hitPart = this.getAllShipParts().find(el => el.letter === shot.letter && el.index === shot.index);
+    if (hitPart) {
+      hitPart.isHit = true;
+      return true;
     }
 
-    const allShipParts = getAllShipParts();
+    return false;
+  }
+
+  getAllShipParts() {
+    let parts: Array<ShipPart> = [];
+    for (const shipKey of Object.keys(this.ships)) {
+      const ship: Array<ShipPart> = this.ships[shipKey];
+      const letterShipPart: Array<ShipPart> = ship.map(el => ({ ...el, shipLetter: shipKey[0].toUpperCase() as ShipLetter }));
+      parts = parts.concat(letterShipPart);
+    }
+
+    return parts;
+  }
+
+  serialiseBoard(): string {
+    const allShipParts = this.getAllShipParts();
 
     const serialiseBoardFunc = (boardStr: string, gameShips: GameBoardShips, boardLetter: ShipLetter, letterRow: number, i: number): string => {
       const possibleShipPart = this.parseShipPart(letterRow, i);
@@ -149,25 +156,30 @@ export class GameBoard {
       return boardStr;
     };
 
-
     const [serialisedStr] = this.parseBoard(emptyBoard, serialiseBoardFunc);
-
     return serialisedStr;
   }
+
+  initialiseShip(shipLetter: ShipLetter, shipPartStr: string, size: number) {
+    const shipPartPosition = shipPartStr.split(',').map(el => el.trim());
+    if (shipPartPosition.length !== size) {
+      throw Error(`Ship requires exactly ${size} parts`);
+    }
+
+    const shipParts: Array<ShipPart> = shipPartPosition.map(el => {
+      if (!isValidPosition(el)) {
+        throw Error('Invalid ship position');
+      }
+      const letter = el[0].toUpperCase() as Letter;
+      const index = Number(el[1]);
+      return { letter, index, shipLetter, isHit: false };
+    });
+    this.ships[shipLetterToKeyMap[shipLetter]] = shipParts;
+  }
+
+  getRandomPosition() {
+    const letterIndex = Math.round(Math.random() * 10) % LETTERS.length;
+    const index = Math.round(Math.random() * 10) % BOARD_SIZE;
+    return LETTERS[letterIndex] + (index + 1);
+  }
 }
-
-const computerBoards = [computerBoard1, computerBoard2, computerBoard3];
-
-const getRandomComputerBoard = () => {
-  const index = Math.round(Math.random() * 10) % computerBoards.length;
-  return computerBoards[index];
-}
-
-const computerGameBoard = new GameBoard();
-const computerBoard = getRandomComputerBoard();
-computerGameBoard.initialiseBoard(computerBoard);
-console.log(computerGameBoard.ships);
-console.log(computerBoard);
-console.log(computerBoard === computerGameBoard.serialiseBoard());
-console.log(computerGameBoard.serialiseBoard());
-
